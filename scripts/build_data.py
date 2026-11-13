@@ -19,6 +19,9 @@ PREFS = ("北海道 青森県 岩手県 宮城県 秋田県 山形県 福島県 
 JOBS = ["医師", "歯科医師", "看護師", "准看護師", "看護補助者", "助産師", "理学療法士", "作業療法士",
         "言語聴覚士", "薬剤師", "診療放射線技師", "臨床検査技師", "臨床工学技士", "管理栄養士", "救急救命士"]
 FUNCS = ["高度急性期", "急性期", "回復期", "慢性期"]
+# 1職種の常勤換算がこの人数を超える報告は入力誤りの疑いが強いとして印を付ける(値は変更しない)。
+# 参考: 全国で最も多い大学病院の看護師でも約1,400人。
+SUSPECT_FTE = 5000
 
 
 def norm(s):
@@ -220,6 +223,7 @@ for hid, h in hosp.items():
     for key, *_ in FIELDS:
         if key not in rec:
             rec[key] = h.get(key)
+    rec["suspect"] = int(any((h["fte_" + j] or 0) > SUSPECT_FTE for j in JOBS))
     records.append(rec)
 records.sort(key=lambda r: r["id"])
 report["hospitals_out"] = len(records)
@@ -231,6 +235,7 @@ report["totals"] = {k: round(sum(r[k] or 0 for r in records), 1)
                               "fte_all", "fte_医師", "fte_看護師")}
 report["masked_ward_values"] = {k: sum(1 for h in hosp.values() if k + "_masked" in h["seen"])
                                 for k in ("adm", "days", "dis", "birth")}
+report["suspect"] = [(r["name"], r["pref"], r["beds"], r["fte_all"]) for r in records if r["suspect"]]
 report["sample"] = [r for r in records if "市立函館病院" in r["name"]][:1]
 
 # 留意事項PDFから秘匿処理などの記述を抜き出す(確認用)
@@ -255,7 +260,7 @@ def rnd(v, d):
 
 
 cats = {}
-cols = {k: [r[k] for r in records] for k in ("id", "name", "city")}
+cols = {k: [r[k] for r in records] for k in ("id", "name", "city", "suspect")}
 for key, _ in CATS:
     present = {r[key] for r in records}
     order = FUNCS + ["休棟中等"] if key == "func" else PREFS if key == "pref" else sorted(present)
