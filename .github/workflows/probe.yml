@@ -1,0 +1,23 @@
+name: probe
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/probe.yml', 'scripts/probe.py']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install openpyxl
+      - run: |
+          mkdir raw
+          B=https://www.mhlw.go.jp/content/10800000
+          for f in 001299890.xlsx 001299921.xlsx 001299988.zip; do
+            curl -fsSL -A "Mozilla/5.0" -o raw/$f $B/$f
+          done
+          ls -l raw
+      - run: python scripts/probe.py
+      - uses: actions/upload-artifact@v4
+        with: { name: probe, path: probe.json }
