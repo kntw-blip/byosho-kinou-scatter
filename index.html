@@ -119,7 +119,8 @@
       <li>主機能(色分け): 高度急性期・急性期・回復期・慢性期のうち、許可病床数が最も多い機能。同数の場合は急性度の高い方としています。全病棟が休棟中の病院は「休棟中等」です。</li>
       <li>診療実績: 2023年4月〜2024年3月の年間値。病床稼働率 = 在棟患者延べ数 ÷(許可病床数 × 366日)、平均在棟日数 = 在棟患者延べ数 ÷((新規入棟患者数 + 退棟患者数)÷ 2)で算出した参考値です。</li>
       <li>秘匿: 公表データで 1〜9 件が「*」と秘匿されている項目は欠損として扱い、その病院は該当の軸を選んだときに表示されません。分娩件数は病棟単位で秘匿があるため、合計が実際より小さい病院があります。</li>
-      <li>相関係数・回帰直線: 表示中の病院について、軸に表示している値(対数目盛の場合も元の値)から算出した線形の値です。相関は因果関係を示すものではありません。</li>
+      <li>救急車の受入件数・休日/夜間の受診患者数は、月別のいずれかが 1〜9 件だと年間値も秘匿されるため、件数の少ない病院は表示されません。</li>
+      <li>相関係数・回帰直線: 表示中の病院について最小二乗法で算出しています。対数目盛にした軸は log₁₀ 変換した値で計算します。相関は因果関係を示すものではありません。</li>
     </ul>
   </details>
 </main>
@@ -247,7 +248,7 @@
       if (!g.x.length) return;
       traces.push({ type: 'scattergl', mode: 'markers', name: D.cats.func[fn], x: g.x, y: g.y,
         text: g.idx.map(hover), hovertemplate: '%{text}<extra></extra>',
-        marker: { color: FCOL[fn], symbol: FSYM[fn], size: size, opacity: xs.length > 3000 ? 0.62 : 0.8,
+        marker: { color: FCOL[fn], symbol: FSYM[fn], size: size * (fn === 3 ? 1.3 : fn === 2 ? 1.1 : 1), opacity: xs.length > 3000 ? 0.62 : 0.8,
           line: { color: '#ffffff', width: fn === 4 ? 0 : 0.6 } } });
     });
 
@@ -255,9 +256,11 @@
     let stat = null;
     const n = xs.length;
     if (n >= 3) {
-      let sx = 0, sy = 0; for (let k = 0; k < n; k++) { sx += xs[k]; sy += ys[k]; }
+      // 対数目盛の軸は log10 変換した値で計算する(画面上で直線になる)
+      const tx = X.log ? Math.log10 : v => v, ty = Y.log ? Math.log10 : v => v;
+      let sx = 0, sy = 0; for (let k = 0; k < n; k++) { sx += tx(xs[k]); sy += ty(ys[k]); }
       const mx = sx / n, my = sy / n; let sxx = 0, syy = 0, sxy = 0;
-      for (let k = 0; k < n; k++) { const dx = xs[k] - mx, dy = ys[k] - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+      for (let k = 0; k < n; k++) { const dx = tx(xs[k]) - mx, dy = ty(ys[k]) - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
       if (sxx > 0 && syy > 0) {
         const b = sxy / sxx, a0 = my - b * mx;
         stat = { r: sxy / Math.sqrt(sxx * syy), b: b, a: a0 };
@@ -265,8 +268,8 @@
           let lo = Infinity, hi = -Infinity; for (let k = 0; k < n; k++) { if (xs[k] < lo) lo = xs[k]; if (xs[k] > hi) hi = xs[k]; }
           const lx = [], ly = [];
           for (let k = 0; k <= 80; k++) {
-            const x = X.log ? lo * Math.pow(hi / lo, k / 80) : lo + (hi - lo) * k / 80, y = a0 + b * x;
-            if (Y.log && y <= 0) continue; lx.push(x); ly.push(y);
+            const x = X.log ? lo * Math.pow(hi / lo, k / 80) : lo + (hi - lo) * k / 80, yt = a0 + b * tx(x);
+            lx.push(x); ly.push(Y.log ? Math.pow(10, yt) : yt);
           }
           traces.push({ type: 'scatter', mode: 'lines', name: '回帰直線', x: lx, y: ly, hoverinfo: 'skip',
             line: { color: '#0b0b0b', width: 2, dash: 'dash' } });
@@ -282,7 +285,7 @@
 
     const ax = A => ({ title: { text: A.title, font: { size: 13, color: '#52514e' } }, type: A.log ? 'log' : 'linear',
       gridcolor: '#ecebe6', zerolinecolor: '#d5d4ce', linecolor: '#d5d4ce', tickfont: { color: '#52514e', size: 11.5 },
-      rangemode: A.log ? 'normal' : 'tozero', automargin: true, separatethousands: true, exponentformat: 'none' });
+      rangemode: A.log ? 'normal' : 'tozero', dtick: A.log ? 1 : undefined, automargin: true, separatethousands: true, exponentformat: 'none' });
     Plotly.react('chart', traces, {
       margin: { l: 60, r: 14, t: 14, b: 54 }, paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff',
       xaxis: ax(X), yaxis: ax(Y), showlegend: false, hovermode: 'closest', dragmode: 'pan',
@@ -300,7 +303,8 @@
     let s = '<span>' + region + ' 表示 <b>' + n.toLocaleString('ja-JP') + '</b> 病院</span>';
     if (stat) {
       s += '<span>相関係数 r = <b>' + stat.r.toFixed(3) + '</b></span>';
-      s += '<span>回帰式 Y = <b>' + fmt(stat.b, 3) + '</b> × X ' + (stat.a < 0 ? '− ' : '+ ') + '<b>' + fmt(Math.abs(stat.a), 2) + '</b></span>';
+      const xn = X.log ? 'log₁₀X' : 'X', yn = Y.log ? 'log₁₀Y' : 'Y';
+      s += '<span>回帰式 ' + yn + ' = <b>' + fmt(stat.b, 3) + '</b> × ' + xn + ' ' + (stat.a < 0 ? '− ' : '+ ') + '<b>' + fmt(Math.abs(stat.a), 2) + '</b></span>';
     }
     if (q) s += '<span>強調表示 <b>' + hl.x.length + '</b> 病院</span>';
     $('stats').innerHTML = s;
