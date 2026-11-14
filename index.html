@@ -258,7 +258,7 @@
     const size = xs.length > 12000 ? 4 : xs.length > 3000 ? 5 : xs.length > 800 ? 6.5 : 8.5;
     const traces = [];
     // 件数の多い機能を先に描き、少ない機能(高度急性期など)が埋もれないようにする
-    [3, 1, 2, 0, 4].forEach(fn => {
+    [0, 1, 2, 3].sort((a, b) => groups[b].x.length - groups[a].x.length).concat(4).forEach(fn => {
       const g = groups[fn];
       if (!g.x.length) return;
       traces.push({ type: 'scattergl', mode: 'markers', name: D.cats.func[fn], x: g.x, y: g.y,
