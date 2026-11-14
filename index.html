@@ -53,6 +53,10 @@
   ul.defs { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--text2); }
   a { color: #1f5fae; }
   #err { color: #b3261e; font-weight: 600; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 10px; background: var(--panel); }
+  .seg button { font: inherit; font-size: 13.5px; padding: 8px 18px; border: 0; background: transparent; color: var(--text2); cursor: pointer; min-height: 40px; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed=true] { background: var(--text); color: #fff; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -60,6 +64,10 @@
   <h1>病床機能報告 散布図分析ツール</h1>
   <p class="sub" id="sub">データを読み込んでいます…</p>
 
+  <div class="seg" role="group" aria-label="表示単位">
+    <button type="button" id="uHosp" aria-pressed="true">病院単位</button>
+    <button type="button" id="uWard" aria-pressed="false">病棟単位</button>
+  </div>
   <section class="controls" aria-label="表示設定">
     <div class="ctl">
       <label class="t" for="selX">X軸(横軸)</label>
@@ -94,15 +102,15 @@
     </div>
   </section>
 
-  <div class="legend" id="legend" aria-label="主機能(クリックで表示切替)"><span class="cap">主機能:</span></div>
+  <div class="legend" id="legend" aria-label="機能区分(クリックで表示切替)"><span class="cap" id="lgcap">主機能:</span></div>
   <div class="stats" id="stats" aria-live="polite"></div>
-  <div id="chart" role="img" aria-label="病院単位の散布図"></div>
+  <div id="chart" role="img" aria-label="散布図"></div>
   <p class="note" id="note"></p>
   <p id="err"></p>
 
   <details id="tbl">
-    <summary>表で見る(表示中の病院) / CSV ダウンロード</summary>
-    <p class="note" style="margin-top:8px"><button class="act" id="csv" type="button">表示中の病院を CSV で保存(全項目)</button>
+    <summary>表で見る(表示中のデータ) / CSV ダウンロード</summary>
+    <p class="note" style="margin-top:8px"><button class="act" id="csv" type="button">表示中のデータを CSV で保存(全項目)</button>
       <span id="tblnote"></span></p>
     <div class="tablewrap"><table id="table"></table></div>
   </details>
@@ -111,13 +119,15 @@
     <summary>データと項目の定義</summary>
     <ul class="defs">
       <li>出典: 厚生労働省 <a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/open_data_00018.html" target="_blank" rel="noopener">令和6年度病床機能報告 公表データ</a>(施設票・様式1病棟票)。本ツールは同データを病院単位に加工したもので、厚生労働省が作成したものではありません。</li>
-      <li>対象: 一般病床・療養病床を有する病院(有床診療所は含みません)。1点が1病院です。</li>
+      <li>対象: 一般病床・療養病床を有する病院(有床診療所は含みません)。病院単位では1点が1病院です。</li>
       <li>職員数: 施設全体の「常勤(実人数)+非常勤(常勤換算)」の合計です。病棟・手術室・外来・その他部門を含みます。</li>
       <li>注意: 病床数は一般病床・療養病床のみで、精神病床などは含みません。一方、職員数は施設全体の人数のため、精神科病院や歯科大学病院などでは病床あたりの職員数が大きく出ます。</li>
       <li>入力誤りとみられる報告: 1職種の常勤換算が 5,000 人を超える報告(令和6年度は1病院)は、初期設定で表示と計算から除外しています。チェックを外すと含められます。元データの値は変更していません。</li>
       <li>病床数: 病棟票の許可病床数(一般+療養)を病院ごとに合計。機能別病床数は各病棟が選択した 2024年7月1日時点の機能区分で集計しています。</li>
       <li>主機能(色分け): 高度急性期・急性期・回復期・慢性期のうち、許可病床数が最も多い機能。同数の場合は急性度の高い方としています。全病棟が休棟中の病院は「休棟中等」です。</li>
       <li>診療実績: 2023年4月〜2024年3月の年間値。病床稼働率 = 在棟患者延べ数 ÷(許可病床数 × 366日)、平均在棟日数 = 在棟患者延べ数 ÷((新規入棟患者数 + 退棟患者数)÷ 2)で算出した参考値です。</li>
+      <li>病棟単位: 1点が1病棟で、色はその病棟が選択した機能区分です。職員数は病棟に配置された11職種(医師は病棟票に項目がないため含みません)で、手術室・外来などの職員は含みません。病院名で検索すると、その病院の全病棟が強調表示されます。</li>
+      <li>医療の内容(様式2): 病棟ごとに報告された年間件数を病院単位に合計しています。公表データでは月別のいずれかが 1〜9 件の病棟は年間値も「*」と秘匿されるため、その分は合計に含まれず、<b>実際より少ない下限値</b>です。件数の少ない手技(PCI、放射線治療、人工心肺手術など)ほど影響が大きく、病院間の比較には注意が必要です。全病棟が秘匿の病院は表示されません。様式1と病棟コードの付番が異なるため、病棟単位では表示できません。</li>
       <li>秘匿: 公表データで 1〜9 件が「*」と秘匿されている項目は欠損として扱い、その病院は該当の軸を選んだときに表示されません。分娩件数は病棟単位で秘匿があるため、合計が実際より小さい病院があります。</li>
       <li>救急車の受入件数・休日/夜間の受診患者数は、月別のいずれかが 1〜9 件だと年間値も秘匿されるため、件数の少ない病院は表示されません。</li>
       <li>相関係数・回帰直線: 表示中の病院について最小二乗法で算出しています。対数目盛にした軸は log₁₀ 変換した値で計算します。相関は因果関係を示すものではありません。</li>
@@ -135,7 +145,8 @@
   const HL = css('--hl');   // 強調表示の色(機能の4色と区別できることを検証済み)
   const FSYM = ['circle', 'square', 'diamond', 'triangle-up', 'x'];
   const NOPER = new Set(['床', '%', '日', '棟']);   // 100床あたり換算が意味を持たない単位
-  let D, F = {}, N = 0, funcOn = [true, true, true, true, true], lastIdx = [];
+  const FILES = { hosp: 'data/hospitals.json', ward: 'data/wards.json' }, CACHE = {};
+  let D, F = {}, N = 0, U = '病院', MODE = 'hosp', funcOn = [true, true, true, true, true], lastIdx = [];
 
   const fmt = (v, dec) => v == null || !isFinite(v) ? '–' :
     v.toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: dec });
@@ -152,6 +163,7 @@
   }
 
   function fillFieldSelect(sel) {
+    sel.innerHTML = '';
     let g = null, og = null;
     D.fields.forEach(f => {
       if (f.group !== g) { g = f.group; og = document.createElement('optgroup'); og.label = g; sel.appendChild(og); }
@@ -187,6 +199,7 @@
 
   function saveState() {
     const s = new URLSearchParams();
+    if (MODE !== 'hosp') s.set('u', MODE);
     s.set('x', $('selX').value); s.set('y', $('selY').value);
     ['perX', 'perY', 'logX', 'logY'].forEach(k => { if ($(k).checked) s.set(k, 1); });
     if (!$('fit').checked) s.set('fit', 0);
@@ -240,8 +253,9 @@
       '(' + D.cats.area[C.area[i]] + '医療圏)<br>' +
       X.short + ': <b>' + fmt(X.val(i), X.dec) + '</b> ' + X.unit + '<br>' +
       Y.short + ': <b>' + fmt(Y.val(i), Y.dec) + '</b> ' + Y.unit + '<br>' +
-      '主機能: ' + D.cats.func[C.func[i]] + ' / 許可病床 ' + fmt(C.beds[i], 0) + ' 床';
-    const size = xs.length > 3000 ? 5 : xs.length > 800 ? 6.5 : 8.5;
+      D.meta.colorLabel + ': ' + D.cats.func[C.func[i]] + ' / 許可病床 ' + fmt(C.beds[i], 0) + ' 床' +
+      (C.fee ? '<br>' + D.cats.fee[C.fee[i]] : '');
+    const size = xs.length > 12000 ? 4 : xs.length > 3000 ? 5 : xs.length > 800 ? 6.5 : 8.5;
     const traces = [];
     // 件数の多い機能を先に描き、少ない機能(高度急性期など)が埋もれないようにする
     [3, 1, 2, 0, 4].forEach(fn => {
@@ -302,20 +316,21 @@
       el.setAttribute('aria-pressed', funcOn[fn]);
     });
     const region = p === '' ? '全国' : D.cats.pref[+p] + (a === '' ? '' : ' ' + D.cats.area[+a] + '医療圏');
-    let s = '<span>' + region + ' 表示 <b>' + n.toLocaleString('ja-JP') + '</b> 病院</span>';
+    let s = '<span>' + region + ' 表示 <b>' + n.toLocaleString('ja-JP') + '</b> ' + U + '</span>';
     if (stat) {
       s += '<span>相関係数 r = <b>' + stat.r.toFixed(3) + '</b></span>';
       const xn = X.log ? 'log₁₀X' : 'X', yn = Y.log ? 'log₁₀Y' : 'Y';
       s += '<span>回帰式 ' + yn + ' = <b>' + fmt(stat.b, 3) + '</b> × ' + xn + ' ' + (stat.a < 0 ? '− ' : '+ ') + '<b>' + fmt(Math.abs(stat.a), 2) + '</b></span>';
     }
-    if (q) s += '<span><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-2px"><path d="M12 1.5l3.1 7 7.4.7-5.6 5 1.7 7.3L12 17.6 5.4 21.5l1.7-7.3-5.6-5 7.4-.7z" fill="' + HL + '" stroke="#0b0b0b" stroke-width="1.2"/></svg> 強調表示 <b>' + hl.x.length + '</b> 病院</span>';
+    if (q) s += '<span><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-2px"><path d="M12 1.5l3.1 7 7.4.7-5.6 5 1.7 7.3L12 17.6 5.4 21.5l1.7-7.3-5.6-5 7.4-.7z" fill="' + HL + '" stroke="#0b0b0b" stroke-width="1.2"/></svg> 強調表示 <b>' + hl.x.length + '</b> ' + U + '</span>';
     $('stats').innerHTML = s;
     const notes = [];
-    if (excluded.length) notes.push('入力誤りとみられる報告(1職種で5,000人超)のため除外: ' + excluded.join('、') + '。');
-    if (missing) notes.push('秘匿・未報告などで値のない ' + missing.toLocaleString('ja-JP') + ' 病院は表示していません。');
-    if (dropLog) notes.push('対数目盛のため値が 0 の ' + dropLog.toLocaleString('ja-JP') + ' 病院は表示していません。');
-    if (!n) notes.push('条件に合う病院がありません。');
-    notes.push('点にカーソルを合わせる(タップする)と病院名と値を表示します。ドラッグで移動、ホイール/ピンチで拡大できます。');
+    if (excluded.length) notes.push('入力誤りとみられる報告(1職種で5,000人超)のため除外: ' + [...new Set(excluded)].slice(0, 5).join('、') + '。');
+    if ([X, Y].some(A => A.f.group.startsWith('医療の内容'))) notes.push('様式2の件数は、秘匿(1〜9件)された病棟分を含まない下限値です。件数の少ない手技ほど実際より少なく表示されます。');
+    if (missing) notes.push('秘匿・未報告などで値のない ' + missing.toLocaleString('ja-JP') + ' ' + U + 'は表示していません。');
+    if (dropLog) notes.push('対数目盛のため値が 0 の ' + dropLog.toLocaleString('ja-JP') + ' ' + U + 'は表示していません。');
+    if (!n) notes.push('条件に合う' + U + 'がありません。');
+    notes.push('点にカーソルを合わせる(タップする)と名称と値を表示します。ドラッグで移動、ホイール/ピンチで拡大できます。');
     $('note').textContent = notes.join(' ');
     renderTable(X, Y);
     saveState();
@@ -325,42 +340,67 @@
     if (!$('tbl').open) return;
     const C = D.cols, rows = lastIdx.slice().sort((i, j) => Y.val(j) - Y.val(i)), LIMIT = 300;
     const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    let h = '<thead><tr><th>病院名</th><th>都道府県</th><th>二次医療圏</th><th>主機能</th><th class="num">' +
+    let h = '<thead><tr><th>' + U + '名</th><th>都道府県</th><th>二次医療圏</th><th>' + D.meta.colorLabel + '</th><th class="num">' +
       esc(X.title) + '</th><th class="num">' + esc(Y.title) + '</th></tr></thead><tbody>';
     rows.slice(0, LIMIT).forEach(i => {
       h += '<tr><td>' + esc(C.name[i]) + '</td><td>' + D.cats.pref[C.pref[i]] + '</td><td>' + esc(D.cats.area[C.area[i]]) +
         '</td><td>' + D.cats.func[C.func[i]] + '</td><td class="num">' + fmt(X.val(i), X.dec) + '</td><td class="num">' + fmt(Y.val(i), Y.dec) + '</td></tr>';
     });
     $('table').innerHTML = h + '</tbody>';
-    $('tblnote').textContent = rows.length > LIMIT ? ' Y軸の値が大きい順に上位 ' + LIMIT + ' 病院を表示(全 ' + rows.length.toLocaleString('ja-JP') + ' 病院は CSV で取得できます)' : ' Y軸の値が大きい順';
+    $('tblnote').textContent = rows.length > LIMIT ? ' Y軸の値が大きい順に上位 ' + LIMIT + ' 件を表示(全 ' + rows.length.toLocaleString('ja-JP') + ' 件は CSV で取得できます)' : ' Y軸の値が大きい順';
   }
 
   function downloadCsv() {
     const C = D.cols, catKeys = Object.keys(D.cats);
     const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-    const head = ['医療機関コード(オープンデータ)', '病院名', '市区町村'].concat(catKeys.map(k => D.catLabels[k]), D.fields.map(f => f.label + '[' + f.unit + ']'));
+    const head = [MODE === 'ward' ? '病棟コード(オープンデータ)' : '医療機関コード(オープンデータ)', U + '名', '市区町村'].concat(catKeys.map(k => D.catLabels[k]), D.fields.map(f => f.label + '[' + f.unit + ']'));
     const lines = [head.map(q).join(',')];
     lastIdx.forEach(i => {
       lines.push([C.id[i], C.name[i], C.city[i]].concat(catKeys.map(k => D.cats[k][C[k][i]]), D.fields.map(f => C[f.key][i])).map(q).join(','));
     });
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' });
-    const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'byosho_kinou_r6.csv';
+    const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'byosho_kinou_r6_' + MODE + '.csv';
     document.body.appendChild(el); el.click(); el.remove();
   }
 
-  fetch('data/hospitals.json').then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(d => {
-    D = d; N = d.cols.id.length; d.fields.forEach(f => { F[f.key] = f; });
-    $('sub').textContent = d.meta.title + ' / ' + d.meta.asof + ' / 全国 ' + N.toLocaleString('ja-JP') + ' 病院(1点 = 1病院)';
+  // データセットを画面に反映する。軸・地域の選択は、新しいデータセットにも存在すれば引き継ぐ
+  function setData(d, keep) {
+    const prev = keep && D ? { x: $('selX').value, y: $('selY').value,
+      pref: $('selPref').value !== '' ? D.cats.pref[+$('selPref').value] : null,
+      area: $('selArea').value !== '' ? D.cats.area[+$('selArea').value] : null } : {};
+    D = d; N = d.cols.id.length; U = d.meta.unit; F = {}; d.fields.forEach(f => { F[f.key] = f; });
+    $('sub').textContent = d.meta.title + ' / ' + d.meta.asof + ' / 全国 ' + N.toLocaleString('ja-JP') + ' ' + U + '(1点 = 1' + U + ')';
     fillFieldSelect($('selX')); fillFieldSelect($('selY'));
-    $('selX').value = 'beds'; $('selY').value = 'fte_all';
+    $('selX').value = F[prev.x] ? prev.x : d.meta.x; $('selY').value = F[prev.y] ? prev.y : d.meta.y;
     fillSelect($('selPref'), d.cats.pref.map((t, i) => [i, t]), '全国');
-    const lg = $('legend');
+    const p = d.cats.pref.indexOf(prev.pref); if (p >= 0) $('selPref').value = p;
+    fillAreas();
+    const a = d.cats.area.indexOf(prev.area);
+    if (a >= 0 && [...$('selArea').options].some(o => o.value === String(a))) $('selArea').value = a;
+    $('lgcap').textContent = d.meta.colorLabel + ':';
+    const lg = $('legend'); lg.querySelectorAll('.chip').forEach(el => el.remove());
     d.cats.func.forEach((name, fn) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.setAttribute('aria-pressed', 'true');
       b.innerHTML = symSvg(fn) + '<span>' + name + '</span><span class="n"></span>';
       b.addEventListener('click', () => { funcOn[fn] = !funcOn[fn]; render(); });
       lg.appendChild(b);
     });
+    $('uHosp').setAttribute('aria-pressed', MODE === 'hosp'); $('uWard').setAttribute('aria-pressed', MODE === 'ward');
+  }
+  function load(mode) {
+    if (!CACHE[mode]) CACHE[mode] = fetch(FILES[mode]).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    return CACHE[mode];
+  }
+  function switchMode(mode) {
+    if (mode === MODE) return;
+    $('sub').textContent = 'データを読み込んでいます…';
+    load(mode).then(d => { MODE = mode; setData(d, true); render(); })
+      .catch(e => { delete CACHE[mode]; $('err').textContent = 'データの読み込みに失敗しました: ' + e.message; });
+  }
+
+  MODE = new URLSearchParams(location.hash.slice(1)).get('u') === 'ward' ? 'ward' : 'hosp';
+  load(MODE).then(d => {
+    setData(d, false);
     loadState();
     ['selX', 'selY', 'perX', 'perY', 'logX', 'logY', 'fit', 'excl', 'selArea'].forEach(id => $(id).addEventListener('change', render));
     $('selPref').addEventListener('change', () => { fillAreas(); render(); });
@@ -369,6 +409,8 @@
       const sw = (a, b, prop) => { const v = $(a)[prop]; $(a)[prop] = $(b)[prop]; $(b)[prop] = v; };
       sw('selX', 'selY', 'value'); sw('perX', 'perY', 'checked'); sw('logX', 'logY', 'checked'); render();
     });
+    $('uHosp').addEventListener('click', () => switchMode('hosp'));
+    $('uWard').addEventListener('click', () => switchMode('ward'));
     $('tbl').addEventListener('toggle', render);
     $('csv').addEventListener('click', downloadCsv);
     render();

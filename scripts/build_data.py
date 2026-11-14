@@ -36,8 +36,7 @@ FORM2 = [
     ("path", "病理組織標本作製", "病理組織標本作製"),
     ("rt", "放射線治療", "放射線治療"),
     ("chemo", "化学療法", "化学療法"),
-    ("stroke", "超急性期脳卒中加算", "超急性期脳卒中加算"),
-    ("evt", "脳血管内手術", "脳血管内手術"),
+    # 超急性期脳卒中加算・脳血管内手術は、ほぼ全病棟が秘匿(*)で合計が出せないため対象外
     ("pci", "経皮的冠動脈形成術", "経皮的冠動脈形成術(PCI)"),
     ("hr_birth", "ハイリスク分娩管理加算", "ハイリスク分娩管理加算"),
     ("er_add", "救急医療管理加算１及び２", "救急医療管理加算1・2"),
@@ -56,7 +55,7 @@ FORM2 = [
     ("reh_early", "早期リハビリテーション加算（リハビリテーション料）", "早期リハビリテーション加算"),
     ("dysph", "摂食機能療法", "摂食機能療法"),
 ]
-G_F2 = "医療の内容(様式2・年間の算定件数)"
+G_F2 = "医療の内容(様式2・年間件数。秘匿分を除く下限値)"
 
 
 def norm(s):
@@ -176,8 +175,7 @@ for r in frows:
     hosp[hid] = h
 
 # ---------- 様式2 病棟票(年間合計) ----------
-# 様式1と様式2では病棟コードの付番が異なるため、病棟は「医療機関コード+病棟名」で突合する。
-# (医療機関コード, 病棟名) -> {key: 数値 or None(秘匿「*」・未報告)}。病院合計は医療機関コードで直接合算する。
+# 様式1と様式2では病棟コードの付番が異なるため、病院合計のみ医療機関コードで合算して使う。
 form2, form2_dup, form2_hosp = {}, set(), defaultdict(lambda: {"wards": 0})
 f2h, f2rows = read(os.path.join(RAW, "form2.xlsx"))
 f2_hid = col(f2h, "オープンデータ医療機関コード", prefix=True)
@@ -245,7 +243,6 @@ for path in sorted(glob.glob(os.path.join(RAW, "ward_*.xlsx"))):
                 h["seen"].add(k)
             elif text(r[wn[k]]) == "*":
                 h["seen"].add(k + "_masked")
-        f2 = form2.get((hid, norm(r[w_wname])))
         # 病棟単位のレコード
         wr = {"id": text(r[w_ward]), "hid": hid, "name": h["name"] + " " + text(r[w_wname]), "city": h["city"],
               "pref": h["pref"], "area": h["area"], "func": func if func in FUNCS else "休棟中等",
@@ -262,8 +259,6 @@ for path in sorted(glob.glob(os.path.join(RAW, "ward_*.xlsx"))):
         wr["occ"] = v["days"] / (beds * DAYS) * 100 if v["days"] is not None and beds > 0 else None
         flow = add(v["adm"], v["dis"])
         wr["alos"] = v["days"] / (flow / 2) if v["days"] and flow else None
-        for k, _, _ in FORM2:
-            wr[k] = f2[k] if f2 is not None else None
         wr["suspect"] = int(any((wr["fte_" + j] or 0) > SUSPECT_FTE for j in WARD_JOBS))
         wards.append(wr)
 report["ward_rows"] = ward_rows
@@ -416,7 +411,7 @@ WFIELDS = [
     ("dis", "退棟患者数(年間)", "診療実績", "人", 0),
     ("occ", "病床稼働率(在棟延べ数÷許可病床×366日)", "診療実績", "%", 1),
     ("alos", "平均在棟日数", "診療実績", "日", 1),
-] + [(k, lab, G_F2, "件", 0) for k, _, lab in FORM2]
+]   # 様式2は病棟コードの付番が様式1と異なり確実に突合できないため、病棟単位には含めない
 WCATS = [("pref", "都道府県"), ("area", "二次医療圏"), ("func", "機能区分"),
          ("fee", "入院基本料・特定入院料"), ("dept", "主とする診療科")]
 for w in wards:
@@ -433,7 +428,6 @@ report["ward_null_counts"] = {k: sum(1 for w in wards if w[k] is None) for k, *_
 report["ward_suspect"] = [(w["name"], w["fte_all"]) for w in wards if w["suspect"]]
 report["ward_max_fte"] = sorted(((w["fte_all"] or 0, w["name"], w["beds"]) for w in wards), reverse=True)[:8]
 report["form2_totals"] = {k: sum(r[k] or 0 for r in records) for k, _, _ in FORM2}
-report["wards_matched_to_form2"] = sum(1 for w in wards if w["ope"] is not None or w["reh"] is not None)
 report["hosp_sample_f2"] = {k: v for r in records if "市立函館病院" in r["name"] for k, v in r.items() if k in dict((a, 1) for a, _, _ in FORM2)}
 report["ward_sample"] = [w for w in wards if "市立函館病院" in w["name"]][:2]
 json.dump(report, open(os.path.join(OUT, "build_report.json"), "w"), ensure_ascii=False, indent=1)
