@@ -424,6 +424,9 @@ report["ward_null_counts"] = {k: sum(1 for w in wards if w[k] is None) for k, *_
 report["ward_suspect"] = [(w["name"], w["fte_all"]) for w in wards if w["suspect"]]
 report["ward_max_fte"] = sorted(((w["fte_all"] or 0, w["name"], w["beds"]) for w in wards), reverse=True)[:8]
 report["form2_totals"] = {k: sum(r[k] or 0 for r in records) for k, _, _ in FORM2}
+report["debug_codes"] = {"form2": sorted(k for k in form2 if k.startswith(("0101010044", "0101010042")))[:30],
+                         "ward": [(w["id"], w["name"]) for w in wards if w["hid"] in ("0101010044", "0101010042")][:30],
+                         "form2_names": [(text(r[f2_ward]), text(r[col(f2h, "病棟名")])) for r in f2rows[:12]]}
 report["ward_sample"] = [w for w in wards if "市立函館病院" in w["name"]][:2]
 json.dump(report, open(os.path.join(OUT, "build_report.json"), "w"), ensure_ascii=False, indent=1)
 print("hospitals:", len(records))
