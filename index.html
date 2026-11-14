@@ -388,7 +388,7 @@
     $('uHosp').setAttribute('aria-pressed', MODE === 'hosp'); $('uWard').setAttribute('aria-pressed', MODE === 'ward');
   }
   function load(mode) {
-    if (!CACHE[mode]) CACHE[mode] = fetch(FILES[mode]).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    if (!CACHE[mode]) CACHE[mode] = fetch(FILES[mode], { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
     return CACHE[mode];
   }
   function switchMode(mode) {
