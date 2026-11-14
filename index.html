@@ -12,7 +12,7 @@
     --surface: #fcfcfb; --panel: #ffffff; --border: #e3e2dd;
     --text: #0b0b0b; --text2: #52514e; --muted: #8a8983; --grid: #ecebe6;
     --f0: #e34948; --f1: #eda100; --f2: #1baf7a; --f3: #2a78d6; --f4: #8a8983;
-    --accent: #0b0b0b;
+    --hl: #d6249f;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--surface); color: var(--text);
@@ -132,6 +132,7 @@
   const $ = id => document.getElementById(id);
   const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const FCOL = [css('--f0'), css('--f1'), css('--f2'), css('--f3'), css('--f4')];
+  const HL = css('--hl');   // 強調表示の色(機能の4色と区別できることを検証済み)
   const FSYM = ['circle', 'square', 'diamond', 'triangle-up', 'x'];
   const NOPER = new Set(['床', '%', '日', '棟']);   // 100床あたり換算が意味を持たない単位
   let D, F = {}, N = 0, funcOn = [true, true, true, true, true], lastIdx = [];
@@ -271,16 +272,17 @@
             const x = X.log ? lo * Math.pow(hi / lo, k / 80) : lo + (hi - lo) * k / 80, yt = a0 + b * tx(x);
             lx.push(x); ly.push(Y.log ? Math.pow(10, yt) : yt);
           }
-          traces.push({ type: 'scatter', mode: 'lines', name: '回帰直線', x: lx, y: ly, hoverinfo: 'skip',
+          traces.push({ type: 'scattergl', mode: 'lines', name: '回帰直線', x: lx, y: ly, hoverinfo: 'skip',
             line: { color: '#0b0b0b', width: 2, dash: 'dash' } });
         }
       }
     }
     if (hl.x.length) {
-      traces.push({ type: 'scatter', mode: hl.x.length <= 8 ? 'markers+text' : 'markers', name: '強調表示', x: hl.x, y: hl.y,
+      // WebGL の点は SVG より手前に描かれるため、強調表示も WebGL で最後に描いて最前面にする
+      traces.push({ type: 'scattergl', mode: hl.x.length <= 8 ? 'markers+text' : 'markers', name: '強調表示', x: hl.x, y: hl.y,
         text: hl.text, textposition: 'top center', textfont: { color: '#0b0b0b', size: 12 },
         customdata: hl.idx.map(hover), hovertemplate: '%{customdata}<extra></extra>',
-        marker: { symbol: 'circle-open', size: 17, color: '#0b0b0b', line: { width: 2.5, color: '#0b0b0b' } } });
+        marker: { symbol: 'star', size: 21, color: HL, opacity: 1, line: { width: 1.5, color: '#0b0b0b' } } });
     }
 
     const ax = A => ({ title: { text: A.title, font: { size: 13, color: '#52514e' } }, type: A.log ? 'log' : 'linear',
@@ -306,7 +308,7 @@
       const xn = X.log ? 'log₁₀X' : 'X', yn = Y.log ? 'log₁₀Y' : 'Y';
       s += '<span>回帰式 ' + yn + ' = <b>' + fmt(stat.b, 3) + '</b> × ' + xn + ' ' + (stat.a < 0 ? '− ' : '+ ') + '<b>' + fmt(Math.abs(stat.a), 2) + '</b></span>';
     }
-    if (q) s += '<span>強調表示 <b>' + hl.x.length + '</b> 病院</span>';
+    if (q) s += '<span><svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-2px"><path d="M12 1.5l3.1 7 7.4.7-5.6 5 1.7 7.3L12 17.6 5.4 21.5l1.7-7.3-5.6-5 7.4-.7z" fill="' + HL + '" stroke="#0b0b0b" stroke-width="1.2"/></svg> 強調表示 <b>' + hl.x.length + '</b> 病院</span>';
     $('stats').innerHTML = s;
     const notes = [];
     if (excluded.length) notes.push('入力誤りとみられる報告(1職種で5,000人超)のため除外: ' + excluded.join('、') + '。');
