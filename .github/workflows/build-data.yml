@@ -22,6 +22,7 @@ jobs:
           get() { curl -fsSL --retry 3 -A "Mozilla/5.0" -o "raw/$2" "$B/$1"; }
           get 001299890.xlsx facility.xlsx
           get 001299988.zip notes.zip
+          get 001299957.xlsx form2.xlsx
           for n in 892 893 894 895 901 914 921; do get 001299$n.xlsx ward_$n.xlsx; done
           ls -l raw
       - run: python scripts/build_data.py raw data

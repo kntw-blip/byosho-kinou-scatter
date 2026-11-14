@@ -71,6 +71,27 @@ def text(v):
     return "" if v is None else str(v).strip()
 
 
+# 各ファイルの項目名一覧を data/columns.json に書き出す(項目確認用)
+def dump_columns():
+    out = {}
+    for name in ("facility.xlsx", "form2.xlsx", "ward_892.xlsx"):
+        path = os.path.join(RAW, name)
+        if not os.path.exists(path):
+            continue
+        wb = load_workbook(path, read_only=True, data_only=True)
+        ws = wb.worksheets[0]
+        rows = []
+        for i, row in enumerate(ws.iter_rows(values_only=True)):
+            if i > 8:
+                break
+            rows.append([None if v is None else str(v)[:60] for v in row])
+        out[name] = {"labels": [norm(v) for v in rows[HEADER_ROW]], "rows": rows, "sheets": wb.sheetnames}
+    os.makedirs(OUT, exist_ok=True)
+    json.dump(out, open(os.path.join(OUT, "columns.json"), "w"), ensure_ascii=False)
+
+
+dump_columns()
+
 report = {"generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 # ---------- 施設票 ----------
