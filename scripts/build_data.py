@@ -176,17 +176,33 @@ for r in frows:
     hosp[hid] = h
 
 # ---------- 様式2 病棟票(年間合計) ----------
-# 病棟コード -> {key: 数値 or None(秘匿「*」・未報告)}
-form2 = {}
+# 様式1と様式2では病棟コードの付番が異なるため、病棟は「医療機関コード+病棟名」で突合する。
+# (医療機関コード, 病棟名) -> {key: 数値 or None(秘匿「*」・未報告)}。病院合計は医療機関コードで直接合算する。
+form2, form2_dup, form2_hosp = {}, set(), defaultdict(lambda: {"wards": 0})
 f2h, f2rows = read(os.path.join(RAW, "form2.xlsx"))
-f2_ward = col(f2h, "病棟コード", prefix=True)
+f2_hid = col(f2h, "オープンデータ医療機関コード", prefix=True)
+f2_wname = col(f2h, "病棟名")
 f2_month = col(f2h, "報告月")
 f2_cols = [(k, col(f2h, lab)) for k, lab, _ in FORM2]
 report["form2_rows"] = len(f2rows)
 report["form2_month_values"] = Counter(text(r[f2_month]) for r in f2rows)
 for r in f2rows:
-    form2[text(r[f2_ward])] = {k: num(r[i]) for k, i in f2_cols}
+    vals = {k: num(r[i]) for k, i in f2_cols}
+    key = (text(r[f2_hid]), norm(r[f2_wname]))
+    if key in form2:
+        form2_dup.add(key)
+    form2[key] = vals
+    agg = form2_hosp[key[0]]
+    agg["wards"] += 1
+    for k, val in vals.items():
+        if val is None:
+            agg["m_" + k] = agg.get("m_" + k, 0) + 1
+        else:
+            agg[k] = agg.get(k, 0) + val
+for key in form2_dup:   # 同名病棟が複数ある場合は突合しない
+    del form2[key]
 report["form2_wards"] = len(form2)
+report["form2_duplicate_names"] = len(form2_dup)
 
 # ---------- 様式1 病棟票 ----------
 func_values, unmatched, ward_rows = Counter(), set(), 0
@@ -229,15 +245,7 @@ for path in sorted(glob.glob(os.path.join(RAW, "ward_*.xlsx"))):
                 h["seen"].add(k)
             elif text(r[wn[k]]) == "*":
                 h["seen"].add(k + "_masked")
-        # 様式2を病院へ合算(秘匿された病棟は合算できないため件数を記録)
-        f2 = form2.get(text(r[w_ward]))
-        if f2 is not None:
-            h["f2_wards"] = h.get("f2_wards", 0) + 1
-            for k, val in f2.items():
-                if val is None:
-                    h["f2m_" + k] = h.get("f2m_" + k, 0) + 1
-                else:
-                    h["f2_" + k] = h.get("f2_" + k, 0) + val
+        f2 = form2.get((hid, norm(r[w_wname])))
         # 病棟単位のレコード
         wr = {"id": text(r[w_ward]), "hid": hid, "name": h["name"] + " " + text(r[w_wname]), "city": h["city"],
               "pref": h["pref"], "area": h["area"], "func": func if func in FUNCS else "休棟中等",
@@ -324,9 +332,10 @@ for hid, h in hosp.items():
     flow = add(rec["adm"], rec["dis"])
     rec["alos"] = rec["days"] / (flow / 2) if rec["days"] and flow else None
     # 様式2: 秘匿のない病棟の合計。合計が0で秘匿病棟がある場合(=1件以上だが不明)と、様式2の報告がない場合は欠損
+    agg = form2_hosp.get(hid)
     for k, _, _ in FORM2:
-        tot, masked = h.get("f2_" + k, 0), h.get("f2m_" + k, 0)
-        rec[k] = None if not h.get("f2_wards") or (masked and tot == 0) else tot
+        tot, masked = (agg.get(k, 0), agg.get("m_" + k, 0)) if agg else (0, 0)
+        rec[k] = None if agg is None or (masked and tot == 0) else tot
     for key, *_ in FIELDS:
         if key not in rec:
             rec[key] = h.get(key)
@@ -343,7 +352,7 @@ report["totals"] = {k: round(sum(r[k] or 0 for r in records), 1)
 report["masked_ward_values"] = {k: sum(1 for h in hosp.values() if k + "_masked" in h["seen"])
                                 for k in ("adm", "days", "dis", "birth")}
 report["suspect"] = [(r["name"], r["pref"], r["beds"], r["fte_all"]) for r in records if r["suspect"]]
-report["form2_hospitals_partly_masked"] = {k: sum(1 for h in hosp.values() if h.get("f2m_" + k) and h.get("f2_" + k, 0) > 0)
+report["form2_hospitals_partly_masked"] = {k: sum(1 for a in form2_hosp.values() if a.get("m_" + k) and a.get(k, 0) > 0)
                                           for k, _, _ in FORM2}
 report["sample"] = [r for r in records if "市立函館病院" in r["name"]][:1]
 
@@ -424,9 +433,8 @@ report["ward_null_counts"] = {k: sum(1 for w in wards if w[k] is None) for k, *_
 report["ward_suspect"] = [(w["name"], w["fte_all"]) for w in wards if w["suspect"]]
 report["ward_max_fte"] = sorted(((w["fte_all"] or 0, w["name"], w["beds"]) for w in wards), reverse=True)[:8]
 report["form2_totals"] = {k: sum(r[k] or 0 for r in records) for k, _, _ in FORM2}
-report["debug_codes"] = {"form2": sorted(k for k in form2 if k.startswith(("0101010044", "0101010042")))[:30],
-                         "ward": [(w["id"], w["name"]) for w in wards if w["hid"] in ("0101010044", "0101010042")][:30],
-                         "form2_names": [(text(r[f2_ward]), text(r[col(f2h, "病棟名")])) for r in f2rows[:12]]}
+report["wards_matched_to_form2"] = sum(1 for w in wards if w["ope"] is not None or w["reh"] is not None)
+report["hosp_sample_f2"] = {k: v for r in records if "市立函館病院" in r["name"] for k, v in r.items() if k in dict((a, 1) for a, _, _ in FORM2)}
 report["ward_sample"] = [w for w in wards if "市立函館病院" in w["name"]][:2]
 json.dump(report, open(os.path.join(OUT, "build_report.json"), "w"), ensure_ascii=False, indent=1)
 print("hospitals:", len(records))
