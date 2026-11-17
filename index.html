@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <link rel="icon" href="data:,">
-<title>病床機能報告 散布図分析ツール(令和6年度)</title>
+<title>病床機能報告 散布図・相関分析ツール(令和6年度)</title>
 <style>
   :root {
     color-scheme: light;
@@ -57,19 +57,60 @@
   .seg button { font: inherit; font-size: 13.5px; padding: 8px 18px; border: 0; background: transparent; color: var(--text2); cursor: pointer; min-height: 40px; }
   .seg button + button { border-left: 1px solid var(--border); }
   .seg button[aria-pressed=true] { background: var(--text); color: #fff; font-weight: 600; }
+  .segs { display: flex; flex-wrap: wrap; gap: 0 10px; }
+  .seg.sm { margin: 0 0 8px; } .seg.sm button { font-size: 12.5px; padding: 5px 12px; min-height: 34px; }
+  body[data-view=corr] .sc-only, body[data-view=sc] .mx-only { display: none !important; }
+  .scale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 12px; color: var(--text2); margin: 8px 0; }
+  .scale .bar { width: 170px; height: 12px; border-radius: 3px; background: linear-gradient(90deg, #1f5fae, #f0efec 50%, #c8302c); }
+  .scale .sw { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; margin-right: 4px; border: 1px solid var(--border); }
+  .na { background: repeating-linear-gradient(45deg, #fff 0 3px, #e3e2dd 3px 4px); }
+  #mxwrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 6px 8px 0; }
+  #mx { border-collapse: separate; border-spacing: 1px; width: auto; table-layout: fixed; font-size: 11px; }
+  #mx th, #mx td { padding: 0; border: 0; position: static; font-weight: 400; color: var(--text2); }
+  #mx td { width: var(--c); min-width: var(--c); height: var(--c); cursor: pointer; text-align: center;
+    font-size: 9.5px; font-variant-numeric: tabular-nums; line-height: 1; }
+  #mx td.dg { background: #d5d4ce; cursor: default; }
+  #mx td.sel { outline: 2px solid var(--text); outline-offset: -1px; }
+  #mx .gs { border-left: 5px solid var(--panel); }
+  #mx th.ch { vertical-align: bottom; cursor: pointer; }
+  #mx th.ch div { writing-mode: vertical-rl; height: 128px; width: var(--c); overflow: hidden; white-space: nowrap;
+    text-align: end; line-height: var(--c); font-size: min(11px, calc(var(--c) - 1px)); }
+  #mx th.rh { position: sticky; left: 0; z-index: 1; background: var(--panel); cursor: pointer; text-align: right;
+    width: var(--lw); min-width: var(--lw); max-width: var(--lw); overflow: hidden; text-overflow: ellipsis; padding: 0 6px 0 8px; }
+  #mx th.corner { position: sticky; left: 0; background: var(--panel); z-index: 1; }
+  #mx th.fc, #mx th.fc div { color: var(--text); font-weight: 700; }
+  #mx tr.gh th { text-align: left; padding-top: 7px; }
+  #mx tr.gh span { position: sticky; left: 8px; display: inline-block; font-weight: 700; color: var(--text); font-size: 11.5px; }
+  #tip { position: fixed; z-index: 20; pointer-events: none; background: #fff; border: 1px solid #d5d4ce; border-radius: 6px;
+    padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.12); max-width: 300px; }
+  #pair { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: 10px; width: min(560px, calc(100vw - 16px));
+    background: #fff; border: 1px solid #c9c8c2; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,.2); padding: 10px 12px; font-size: 13px; }
+  #pair .names { font-weight: 600; padding-right: 30px; }
+  #pair .val { margin: 4px 0 8px; color: var(--text2); } #pair .val b { color: var(--text); font-size: 17px; font-variant-numeric: tabular-nums; }
+  #pair .x { position: absolute; right: 6px; top: 4px; border: 0; background: none; font-size: 20px; cursor: pointer; min-width: 36px; min-height: 36px; color: var(--text2); }
+  button.pri { background: var(--text); color: #fff; border-color: var(--text); font-weight: 600; }
+  #rank td { cursor: pointer; } #rank tr:hover td { background: #f6f5f1; }
+  .dbar { position: relative; width: 120px; height: 12px; background: linear-gradient(90deg, transparent calc(50% - .5px), #c9c8c2 calc(50% - .5px), #c9c8c2 calc(50% + .5px), transparent calc(50% + .5px)); }
+  .dbar i { position: absolute; top: 1px; height: 10px; border-radius: 2px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>病床機能報告 散布図分析ツール</h1>
+  <h1>病床機能報告 散布図・相関分析ツール</h1>
   <p class="sub" id="sub">データを読み込んでいます…</p>
 
+  <div class="segs">
+  <div class="seg" role="group" aria-label="表示内容">
+    <button type="button" id="vSc" aria-pressed="true">散布図</button>
+    <button type="button" id="vMx" aria-pressed="false">相関行列</button>
+  </div>
   <div class="seg" role="group" aria-label="表示単位">
     <button type="button" id="uHosp" aria-pressed="true">病院単位</button>
     <button type="button" id="uWard" aria-pressed="false">病棟単位</button>
   </div>
+  </div>
   <section class="controls" aria-label="表示設定">
-    <div class="ctl">
+    <div class="ctl sc-only">
       <label class="t" for="selX">X軸(横軸)</label>
       <select id="selX"></select>
       <div class="opts">
@@ -77,7 +118,7 @@
         <label><input type="checkbox" id="logX"><span>対数目盛</span></label>
       </div>
     </div>
-    <div class="ctl">
+    <div class="ctl sc-only">
       <label class="t" for="selY">Y軸(縦軸)</label>
       <select id="selY"></select>
       <div class="opts">
@@ -92,23 +133,50 @@
       <select id="selArea" disabled></select>
     </div>
     <div class="ctl">
-      <label class="t" for="q">病院名で強調表示(例: 自院・競合病院)</label>
-      <input type="text" id="q" placeholder="病院名の一部を入力" autocomplete="off">
+      <div class="sc-only">
+        <label class="t" for="q">病院名で強調表示(例: 自院・競合病院)</label>
+        <input type="text" id="q" placeholder="病院名の一部を入力" autocomplete="off">
+      </div>
+      <div class="mx-only">
+        <label class="t" id="perCap">値の扱い</label>
+        <div class="seg sm" role="group" aria-labelledby="perCap">
+          <button type="button" id="mRaw" aria-pressed="true">実数</button>
+          <button type="button" id="mPer" aria-pressed="false">100床あたり</button>
+        </div>
+        <label class="t" for="selF">注目する項目(相関の強い順に一覧)</label>
+        <select id="selF"></select>
+      </div>
       <div class="opts">
-        <label><input type="checkbox" id="fit" checked><span>回帰直線を表示</span></label>
+        <label class="sc-only"><input type="checkbox" id="fit" checked><span>回帰直線を表示</span></label>
         <label><input type="checkbox" id="excl" checked><span>入力誤りとみられる報告を除外</span></label>
-        <button class="act" id="swap" type="button">X・Y を入れ替え</button>
+        <button class="act sc-only" id="swap" type="button">X・Y を入れ替え</button>
       </div>
     </div>
   </section>
 
   <div class="legend" id="legend" aria-label="機能区分(クリックで表示切替)"><span class="cap" id="lgcap">主機能:</span></div>
   <div class="stats" id="stats" aria-live="polite"></div>
-  <div id="chart" role="img" aria-label="散布図"></div>
+  <div id="chart" class="sc-only" role="img" aria-label="散布図"></div>
+  <div class="mx-only">
+    <div class="scale" aria-hidden="true">
+      <span>負の相関 −1</span><span class="bar"></span><span>+1 正の相関</span>
+      <span><span class="sw na"></span>算出不可(組になる値が10件未満、または値がすべて同じ)</span>
+    </div>
+    <div id="mxwrap"><table id="mx" aria-label="スピアマン順位相関係数の行列"></table></div>
+  </div>
   <p class="note" id="note"></p>
+  <div class="mx-only">
+    <details id="rankbox" open>
+      <summary id="ranksum">項目ごとの一覧</summary>
+      <div class="tablewrap"><table id="rank"></table></div>
+    </details>
+    <p class="note"><button class="act" id="mxcsv" type="button">相関行列を CSV で保存(項目の組ごとに ρ と件数)</button></p>
+  </div>
+  <div id="tip" hidden></div>
+  <div id="pair" hidden role="dialog" aria-label="選択した2項目の相関"></div>
   <p id="err"></p>
 
-  <details id="tbl">
+  <details id="tbl" class="sc-only">
     <summary>表で見る(表示中のデータ) / CSV ダウンロード</summary>
     <p class="note" style="margin-top:8px"><button class="act" id="csv" type="button">表示中のデータを CSV で保存(全項目)</button>
       <span id="tblnote"></span></p>
@@ -131,6 +199,8 @@
       <li>秘匿: 公表データで 1〜9 件が「*」と秘匿されている項目は欠損として扱い、その病院は該当の軸を選んだときに表示されません。分娩件数は病棟単位で秘匿があるため、合計が実際より小さい病院があります。</li>
       <li>救急車の受入件数・休日/夜間の受診患者数は、月別のいずれかが 1〜9 件だと年間値も秘匿されるため、件数の少ない病院は表示されません。</li>
       <li>相関係数・回帰直線: 表示中の病院について最小二乗法で算出しています。対数目盛にした軸は log₁₀ 変換した値で計算します。相関は因果関係を示すものではありません。</li>
+      <li>相関行列(スピアマン順位相関係数 ρ): 値を順位に置き換えて計算する相関係数で、外れ値や分布の偏りの影響を受けにくく、直線でなくても「一方が大きいほど他方も大きい」関係を捉えます。同順位は平均順位で処理しています。項目の組ごとに、両方の値がある病院(病棟)だけで計算するため、組によって件数が異なります(10件未満は算出しません)。秘匿の多い様式2の項目は、件数の多い大規模病院に偏った結果になります。</li>
+      <li>相関行列の「実数」は報告値そのままで、病院の規模が大きいほど多くの項目が大きくなるため全体に正の相関が強く出ます。「100床あたり」は件数・人数・台数を許可病床数で割って規模の影響を除いた値です(病床数・病棟数・稼働率・在棟日数は換算しません)。合計とその内訳(例: 全職種計と看護師)は定義上、相関が高くなります。</li>
     </ul>
   </details>
 </main>
@@ -147,6 +217,10 @@
   const NOPER = new Set(['床', '%', '日', '棟']);   // 100床あたり換算が意味を持たない単位
   const FILES = { hosp: 'data/hospitals.json', ward: 'data/wards.json' }, CACHE = {};
   let D, F = {}, N = 0, U = '病院', MODE = 'hosp', funcOn = [true, true, true, true, true], lastIdx = [];
+  let VIEW = 'sc', MXPER = false, MX = null, PAIR = null;
+  const MINN = 10;   // 相関を算出する最小件数
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const mxLabel = f => f.label.replace(/[((][^(())]*[))]$/, '') || f.label;
 
   const fmt = (v, dec) => v == null || !isFinite(v) ? '–' :
     v.toLocaleString('ja-JP', { minimumFractionDigits: 0, maximumFractionDigits: dec });
@@ -199,6 +273,9 @@
 
   function saveState() {
     const s = new URLSearchParams();
+    if (VIEW === 'corr') s.set('v', 'corr');
+    if (MXPER) s.set('per', 1);
+    if ($('selF').value) s.set('f', $('selF').value);
     if (MODE !== 'hosp') s.set('u', MODE);
     s.set('x', $('selX').value); s.set('y', $('selY').value);
     ['perX', 'perY', 'logX', 'logY'].forEach(k => { if ($(k).checked) s.set(k, 1); });
@@ -222,9 +299,175 @@
     const a = D.cats.area.indexOf(s.get('area'));
     if (a >= 0 && [...$('selArea').options].some(o => o.value === String(a))) $('selArea').value = a;
     if (s.get('q')) $('q').value = s.get('q');
+    VIEW = s.get('v') === 'corr' ? 'corr' : 'sc'; MXPER = s.get('per') === '1';
+    if (F[s.get('f')]) $('selF').value = s.get('f');
   }
 
   function render() {
+    document.body.dataset.view = VIEW;
+    $('vSc').setAttribute('aria-pressed', VIEW === 'sc'); $('vMx').setAttribute('aria-pressed', VIEW === 'corr');
+    $('mRaw').setAttribute('aria-pressed', !MXPER); $('mPer').setAttribute('aria-pressed', MXPER);
+    $('tip').hidden = true;
+    if (VIEW === 'corr') { computeMx(); drawMx(); saveState(); return; }
+    closePair();
+    renderSc();
+    Plotly.Plots.resize($('chart'));
+  }
+
+  // 同順位を平均順位とするスピアマン順位相関係数
+  function spearman(xs, ys) {
+    const n = xs.length; if (n < 3) return null;
+    const rk = v => { const o = Array.from(v.keys()).sort((a, b) => v[a] - v[b]), r = new Float64Array(n);
+      for (let i = 0; i < n;) { let e = i; while (e < n && v[o[e]] === v[o[i]]) e++; for (let t = i; t < e; t++) r[o[t]] = (i + e + 1) / 2; i = e; } return r; };
+    const a = rk(xs), b = rk(ys), m = (n + 1) / 2; let sxx = 0, syy = 0, sxy = 0;
+    for (let i = 0; i < n; i++) { const dx = a[i] - m, dy = b[i] - m; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+    return sxx > 0 && syy > 0 ? sxy / Math.sqrt(sxx * syy) : null;
+  }
+
+  // ---- 相関行列 ----
+  // ord の順(v の昇順)に、other が欠損でない行だけへ平均順位を振る。振った件数を返す
+  function rankJoint(ord, v, other, R) {
+    const L = ord.length; let n = 0, i = 0;
+    while (i < L) {
+      const j = ord[i]; if (other[j] !== other[j]) { i++; continue; }
+      const val = v[j]; let cnt = 0, e = i;
+      while (e < L) { const jj = ord[e]; if (other[jj] !== other[jj]) { e++; continue; } if (v[jj] !== val) break; cnt++; e++; }
+      const r = n + (cnt + 1) / 2;
+      for (let t = i; t < e; t++) { const jj = ord[t]; if (other[jj] === other[jj]) R[jj] = r; }
+      n += cnt; i = e;
+    }
+    return n;
+  }
+  function computeMx() {
+    const C = D.cols, p = $('selPref').value, a = $('selArea').value, excl = $('excl').checked;
+    const rows = [], counts = [0, 0, 0, 0, 0], excluded = [];
+    for (let i = 0; i < N; i++) {
+      if (p !== '' && C.pref[i] !== +p) continue;
+      if (a !== '' && C.area[i] !== +a) continue;
+      if (excl && C.suspect[i]) { excluded.push(C.name[i]); continue; }
+      counts[C.func[i]]++;
+      if (funcOn[C.func[i]]) rows.push(i);
+    }
+    const m = rows.length, fs = D.fields, k = fs.length, beds = C.beds;
+    const V = fs.map(f => {
+      const col = C[f.key], per = MXPER && !NOPER.has(f.unit), out = new Float64Array(m);
+      for (let j = 0; j < m; j++) { const i = rows[j], v = col[i]; out[j] = v == null ? NaN : !per ? v : beds[i] > 0 ? v / beds[i] * 100 : NaN; }
+      return out;
+    });
+    const ORD = V.map(v => { const o = []; for (let j = 0; j < m; j++) if (v[j] === v[j]) o.push(j); o.sort((x, y) => v[x] - v[y]); return Int32Array.from(o); });
+    const rho = fs.map(() => new Array(k).fill(null)), cnt = fs.map(() => new Array(k).fill(0));
+    const Ra = new Float64Array(m), Rb = new Float64Array(m);
+    for (let x = 0; x < k; x++) {
+      cnt[x][x] = ORD[x].length;
+      for (let y = x + 1; y < k; y++) {
+        const n = rankJoint(ORD[x], V[x], V[y], Ra); cnt[x][y] = cnt[y][x] = n;
+        if (n < MINN) continue;
+        rankJoint(ORD[y], V[y], V[x], Rb);
+        const mean = (n + 1) / 2, o = ORD[x], vy = V[y]; let sxx = 0, syy = 0, sxy = 0;
+        for (let t = 0; t < o.length; t++) { const j = o[t]; if (vy[j] !== vy[j]) continue; const dx = Ra[j] - mean, dy = Rb[j] - mean; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+        if (sxx > 0 && syy > 0) rho[x][y] = rho[y][x] = sxy / Math.sqrt(sxx * syy);
+      }
+    }
+    const region = p === '' ? '全国' : D.cats.pref[+p] + (a === '' ? '' : ' ' + D.cats.area[+a] + '医療圏');
+    MX = { rho, cnt, m, counts, excluded, region };
+  }
+  const POS = [200, 48, 44], NEG = [31, 95, 174], MID = [240, 239, 236];
+  function rhoColor(r) { const t = Math.min(1, Math.abs(r)), e = r >= 0 ? POS : NEG;
+    return 'rgb(' + MID.map((c, i) => Math.round(c + (e[i] - c) * t)).join(',') + ')'; }
+  const rhoTxt = r => (r < 0 ? '−' : '') + Math.abs(r).toFixed(3);
+  const strength = r => { const t = Math.abs(r); return t < 0.2 ? 'ほぼ相関なし' : (t >= 0.7 ? '強い' : t >= 0.4 ? '中程度の' : '弱い') + (r > 0 ? '正の相関' : '負の相関'); };
+  const pairText = (x, y) => { const fs = D.fields, r = MX.rho[x][y], n = MX.cnt[x][y];
+    return { names: mxLabel(fs[x]) + ' × ' + mxLabel(fs[y]), r, n,
+      val: r == null ? '算出不可(' + (n < MINN ? '組になる値が ' + n + ' 件' : '値がすべて同じ') + ')' : 'ρ = <b>' + rhoTxt(r) + '</b> ' + strength(r) + ' / ' + n.toLocaleString('ja-JP') + ' ' + U }; };
+
+  function drawMx() {
+    if (!MX) return;
+    const fs = D.fields, k = fs.length, wrap = $('mxwrap'), W = wrap.clientWidth, lw = W < 640 ? 112 : 200;
+    const cell = Math.max(12, Math.min(34, Math.floor((W - lw - 40) / k) - 1)), num = cell >= 30;
+    const fx = fs.findIndex(f => f.key === $('selF').value);
+    const gs = b => b > 0 && fs[b].group !== fs[b - 1].group ? ' gs' : '';
+    const tb = $('mx'); tb.style.setProperty('--c', cell + 'px'); tb.style.setProperty('--lw', lw + 'px');
+    let h = '<thead><tr><th class="corner"></th>';
+    fs.forEach((f, b) => { h += '<th class="ch' + gs(b) + (b === fx ? ' fc' : '') + '" data-f="' + b + '" title="' + esc(f.label) + '"><div>' + esc(mxLabel(f)) + '</div></th>'; });
+    h += '</tr></thead><tbody>';
+    fs.forEach((f, x) => {
+      if (x === 0 || f.group !== fs[x - 1].group) h += '<tr class="gh"><th colspan="' + (k + 1) + '"><span>' + esc(f.group) + '</span></th></tr>';
+      h += '<tr><th class="rh' + (x === fx ? ' fc' : '') + '" data-f="' + x + '" title="' + esc(f.label) + '">' + esc(mxLabel(f)) + '</th>';
+      for (let y = 0; y < k; y++) {
+        const r = MX.rho[x][y], g = gs(y), sel = PAIR && PAIR[0] === x && PAIR[1] === y ? ' sel' : '';
+        if (x === y) h += '<td class="dg' + g + '"></td>';
+        else if (r == null) h += '<td class="na' + g + sel + '" data-a="' + x + '" data-b="' + y + '"></td>';
+        else h += '<td class="' + g + sel + '" data-a="' + x + '" data-b="' + y + '" style="background:' + rhoColor(r) + (Math.abs(r) > 0.55 ? ';color:#fff' : ';color:#0b0b0b') + '">' +
+          (num ? (r < 0 ? '−' : '') + Math.abs(r).toFixed(2).replace(/^0/, '') : '') + '</td>';
+      }
+      h += '</tr>';
+    });
+    tb.innerHTML = h + '</tbody>';
+
+    document.querySelectorAll('#legend .chip').forEach((el, fn) => {
+      el.querySelector('.n').textContent = MX.counts[fn].toLocaleString('ja-JP'); el.setAttribute('aria-pressed', funcOn[fn]);
+    });
+    $('stats').innerHTML = '<span>' + MX.region + ' 対象 <b>' + MX.m.toLocaleString('ja-JP') + '</b> ' + U + '</span><span><b>' + k + '</b> 項目 × ' + k + ' 項目</span>' +
+      '<span>スピアマン順位相関係数 ρ(' + (MXPER ? '100床あたり' : '実数') + ')</span>';
+    const notes = [];
+    if (MX.m < MINN) notes.push('対象が ' + MINN + ' ' + U + '未満のため相関を算出できません。地域の絞り込みを広げてください。');
+    else if (MX.m < 30) notes.push('対象が少ないため、相関係数は偶然で大きく振れます。参考値としてご覧ください。');
+    if (MX.excluded.length) notes.push('入力誤りとみられる報告(1職種で5,000人超)のため除外: ' + [...new Set(MX.excluded)].slice(0, 5).join('、') + '。');
+    if (!MXPER) notes.push('実数は病院の規模の影響を含みます。規模の影響を除くには「100床あたり」に切り替えてください。');
+    if (MODE === 'hosp') notes.push('様式2の件数は秘匿分を含まない下限値で、値のある病院だけで計算しています。');
+    notes.push('マスを押すと2項目の相関係数と件数を表示し、散布図へ移動できます。項目名を押すと、その項目と相関の強い順の一覧を表示します。');
+    $('note').textContent = notes.join(' ');
+    drawRank(fx);
+  }
+  function drawRank(fx) {
+    const fs = D.fields, tb = $('rank');
+    let list, head;
+    if (fx >= 0) {
+      $('ranksum').textContent = '「' + mxLabel(fs[fx]) + '」と相関の強い順';
+      list = fs.map((f, y) => [fx, y]).filter(([x, y]) => x !== y && MX.rho[x][y] != null);
+      head = '<th>項目</th>';
+    } else {
+      $('ranksum').textContent = '相関の強い組み合わせ 上位30(注目する項目を選ぶと項目別の一覧になります)';
+      list = []; for (let x = 0; x < fs.length; x++) for (let y = x + 1; y < fs.length; y++) if (MX.rho[x][y] != null) list.push([x, y]);
+      head = '<th>項目A</th><th>項目B</th>';
+    }
+    list.sort((p, q) => Math.abs(MX.rho[q[0]][q[1]]) - Math.abs(MX.rho[p[0]][p[1]]));
+    if (fx < 0) list = list.slice(0, 30);
+    let h = '<thead><tr>' + head + '<th class="num">ρ</th><th></th><th class="num">件数</th></tr></thead><tbody>';
+    list.forEach(([x, y]) => {
+      const r = MX.rho[x][y], w = Math.abs(r) * 50;
+      h += '<tr data-a="' + x + '" data-b="' + y + '">' + (fx < 0 ? '<td>' + esc(mxLabel(fs[x])) + '</td>' : '') + '<td>' + esc(mxLabel(fs[y])) + '</td><td class="num">' + rhoTxt(r) +
+        '</td><td><div class="dbar"><i style="width:' + w + '%;' + (r >= 0 ? 'left:50%' : 'right:50%') + ';background:' + (r >= 0 ? '#c8302c' : '#1f5fae') + '"></i></div></td><td class="num">' +
+        MX.cnt[x][y].toLocaleString('ja-JP') + '</td></tr>';
+    });
+    if (!list.length) h += '<tr><td colspan="5">算出できる組み合わせがありません。</td></tr>';
+    tb.innerHTML = h + '</tbody>';
+  }
+  function openPair(x, y) {
+    PAIR = [x, y]; const t = pairText(x, y), el = $('pair');
+    el.innerHTML = '<button class="x" type="button" aria-label="閉じる">×</button><div class="names">' + esc(t.names) + '</div><div class="val">' + t.val +
+      (MXPER ? '(100床あたり)' : '') + '</div><button class="act pri" type="button" id="toSc">この2項目の散布図を見る</button>';
+    el.hidden = false;
+    el.querySelector('.x').addEventListener('click', () => { closePair(); });
+    $('toSc').addEventListener('click', () => {
+      $('selY').value = D.fields[x].key; $('selX').value = D.fields[y].key; $('perX').checked = $('perY').checked = MXPER;
+      VIEW = 'sc'; render(); window.scrollTo({ top: 0 });
+    });
+    document.querySelectorAll('#mx td.sel').forEach(e => e.classList.remove('sel'));
+    const td = document.querySelector('#mx td[data-a="' + x + '"][data-b="' + y + '"]'); if (td) td.classList.add('sel');
+  }
+  function closePair() { PAIR = null; $('pair').hidden = true; document.querySelectorAll('#mx td.sel').forEach(e => e.classList.remove('sel')); }
+  function mxCsv() {
+    const fs = D.fields, q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const lines = [['項目A', '項目B', 'スピアマンρ', '件数', '値の扱い', '対象'].map(q).join(',')];
+    for (let x = 0; x < fs.length; x++) for (let y = x + 1; y < fs.length; y++)
+      lines.push([fs[x].label, fs[y].label, MX.rho[x][y] == null ? '' : MX.rho[x][y].toFixed(4), MX.cnt[x][y], MXPER ? '100床あたり' : '実数', MX.region].map(q).join(','));
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv' });
+    const el = document.createElement('a'); el.href = URL.createObjectURL(blob); el.download = 'byosho_kinou_r6_spearman_' + MODE + '.csv';
+    document.body.appendChild(el); el.click(); el.remove();
+  }
+
+  function renderSc() {
     const X = axis('X'), Y = axis('Y');
     const p = $('selPref').value, a = $('selArea').value, q = $('q').value.trim();
     const C = D.cols;
@@ -319,6 +562,7 @@
     let s = '<span>' + region + ' 表示 <b>' + n.toLocaleString('ja-JP') + '</b> ' + U + '</span>';
     if (stat) {
       s += '<span>相関係数 r = <b>' + stat.r.toFixed(3) + '</b></span>';
+      const sp = spearman(xs, ys); if (sp != null) s += '<span>スピアマン ρ = <b>' + sp.toFixed(3) + '</b></span>';
       const xn = X.log ? 'log₁₀X' : 'X', yn = Y.log ? 'log₁₀Y' : 'Y';
       s += '<span>回帰式 ' + yn + ' = <b>' + fmt(stat.b, 3) + '</b> × ' + xn + ' ' + (stat.a < 0 ? '− ' : '+ ') + '<b>' + fmt(Math.abs(stat.a), 2) + '</b></span>';
     }
@@ -339,7 +583,6 @@
   function renderTable(X, Y) {
     if (!$('tbl').open) return;
     const C = D.cols, rows = lastIdx.slice().sort((i, j) => Y.val(j) - Y.val(i)), LIMIT = 300;
-    const esc = t => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     let h = '<thead><tr><th>' + U + '名</th><th>都道府県</th><th>二次医療圏</th><th>' + D.meta.colorLabel + '</th><th class="num">' +
       esc(X.title) + '</th><th class="num">' + esc(Y.title) + '</th></tr></thead><tbody>';
     rows.slice(0, LIMIT).forEach(i => {
@@ -370,7 +613,10 @@
       area: $('selArea').value !== '' ? D.cats.area[+$('selArea').value] : null } : {};
     D = d; N = d.cols.id.length; U = d.meta.unit; F = {}; d.fields.forEach(f => { F[f.key] = f; });
     $('sub').textContent = d.meta.title + ' / ' + d.meta.asof + ' / 全国 ' + N.toLocaleString('ja-JP') + ' ' + U + '(1点 = 1' + U + ')';
-    fillFieldSelect($('selX')); fillFieldSelect($('selY'));
+    const pf = keep ? $('selF').value : '';
+    fillFieldSelect($('selX')); fillFieldSelect($('selY')); fillFieldSelect($('selF'));
+    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '(選択なし: 全体の上位30組を表示)'; $('selF').prepend(o0);
+    $('selF').value = F[pf] ? pf : ''; MX = null; PAIR = null; $('pair').hidden = true;
     $('selX').value = F[prev.x] ? prev.x : d.meta.x; $('selY').value = F[prev.y] ? prev.y : d.meta.y;
     fillSelect($('selPref'), d.cats.pref.map((t, i) => [i, t]), '全国');
     const p = d.cats.pref.indexOf(prev.pref); if (p >= 0) $('selPref').value = p;
@@ -412,6 +658,28 @@
     $('uHosp').addEventListener('click', () => switchMode('hosp'));
     $('uWard').addEventListener('click', () => switchMode('ward'));
     $('tbl').addEventListener('toggle', render);
+    $('vSc').addEventListener('click', () => { VIEW = 'sc'; render(); });
+    $('vMx').addEventListener('click', () => { VIEW = 'corr'; render(); });
+    $('mRaw').addEventListener('click', () => { MXPER = false; closePair(); render(); });
+    $('mPer').addEventListener('click', () => { MXPER = true; closePair(); render(); });
+    $('selF').addEventListener('change', () => { drawMx(); saveState(); });
+    $('mxcsv').addEventListener('click', mxCsv);
+    $('mx').addEventListener('click', e => {
+      const td = e.target.closest('td[data-a]'), th = e.target.closest('th[data-f]');
+      if (td) openPair(+td.dataset.a, +td.dataset.b);
+      else if (th) { $('selF').value = D.fields[+th.dataset.f].key; drawMx(); saveState(); }
+    });
+    $('rank').addEventListener('click', e => { const tr = e.target.closest('tr[data-a]'); if (tr) openPair(+tr.dataset.a, +tr.dataset.b); });
+    $('mx').addEventListener('pointermove', e => {
+      const td = e.pointerType === 'mouse' && e.target.closest('td[data-a]'), tip = $('tip');
+      if (!td) { tip.hidden = true; return; }
+      const t = pairText(+td.dataset.a, +td.dataset.b);
+      tip.innerHTML = '<b>' + esc(t.names) + '</b><br>' + t.val; tip.hidden = false;
+      tip.style.left = Math.min(e.clientX + 14, window.innerWidth - tip.offsetWidth - 8) + 'px';
+      tip.style.top = (e.clientY + 18 + tip.offsetHeight > window.innerHeight ? e.clientY - tip.offsetHeight - 10 : e.clientY + 18) + 'px';
+    });
+    $('mx').addEventListener('pointerleave', () => { $('tip').hidden = true; });
+    let rt; window.addEventListener('resize', () => { if (VIEW !== 'corr') return; clearTimeout(rt); rt = setTimeout(drawMx, 150); });
     $('csv').addEventListener('click', downloadCsv);
     render();
   }).catch(e => { $('sub').textContent = ''; $('err').textContent = 'データの読み込みに失敗しました: ' + e.message; });
